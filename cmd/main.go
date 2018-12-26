@@ -20,11 +20,11 @@ const (
 	concurrencyFactor = 5
 )
 
-func calculateDurationPercentiles(d []time.Duration) map[float64]time.Duration {
+func calculateDurationPercentiles(rs []Result) map[float64]time.Duration {
 	// convert duration to int to facilitate sorting
-	ints := make([]int, len(d))
-	for i, v := range d {
-		ints[i] = int(v)
+	ints := make([]int, len(rs))
+	for i, r := range rs {
+		ints[i] = int(r.RequestDuration)
 	}
 	sort.Ints(ints)
 
@@ -34,7 +34,7 @@ func calculateDurationPercentiles(d []time.Duration) map[float64]time.Duration {
 	ret := make(map[float64]time.Duration)
 
 	for _, p := range percentiles {
-		length := float64(len(d))
+		length := float64(len(rs))
 		index := length * p
 		ret[p] = time.Duration(ints[int(index)])
 
@@ -67,62 +67,66 @@ func requestWorker(wg *sync.WaitGroup, in <-chan WorkItem, out chan<- Result) {
 	}
 }
 
+func collectResults(out <-chan Result) map[string][]Result {
+	ret := make(map[string][]Result)
+	for r := range out {
+		ret[r.ID] = append(ret[r.ID], r)
+		//fmt.Printf("%s: %s [%d] [%d ms]\n", r.ID, r.URL, r.StatusCode, r.RequestDuration/time.Millisecond)
+	}
+	return ret
+}
+
 func main() {
-	urlSpecs := map[string]randurl.URLSpec{
-		"status_test": randurl.URLSpec{
-			Scheme: "http",
-			Host:   "httpbin.org",
-			Components: []randurl.PathComponent{
-				randurl.StringComponent("status"),
-				randurl.IntegerComponent{Min: 100, Max: 511},
+	tests := []Test{
+		Test{
+			ID:          "status-test",
+			NumRequests: 100,
+			Concurrency: 4,
+			Delay:       0,
+			Specs: []randurl.URLSpec{
+				randurl.URLSpec{
+					Scheme: "http",
+					Host:   "httpbin.org",
+					Components: []randurl.PathComponent{
+						randurl.StringComponent("status"),
+						randurl.IntegerComponent{Min: 100, Max: 511},
+					},
+				},
 			},
 		},
-		"delay_test": randurl.URLSpec{
-			Scheme: "http",
-			Host:   "httpbin.org",
-			Components: []randurl.PathComponent{
-				randurl.StringComponent("delay"),
-				randurl.IntegerComponent{Min: 1, Max: 2},
+		Test{
+			ID:          "delay-test",
+			NumRequests: 50,
+			Concurrency: 50,
+			Delay:       0, //100 * time.Millisecond,
+			Specs: []randurl.URLSpec{
+				randurl.URLSpec{
+					Scheme: "http",
+					Host:   "httpbin.org",
+					Components: []randurl.PathComponent{
+						randurl.StringComponent("delay"),
+						randurl.IntegerComponent{Min: 1, Max: 2},
+					},
+				},
 			},
 		},
 	}
+	test := tests[1]
 
-	wg := new(sync.WaitGroup)
-	in := make(chan WorkItem, len(urlSpecs)*numRequests)
-	out := make(chan Result, concurrencyFactor)
-
-	for i := 0; i < concurrencyFactor; i++ {
-		wg.Add(1)
-		go requestWorker(wg, in, out)
-	}
-
-	for id, spec := range urlSpecs {
-		for i := 0; i < numRequests; i++ {
-			in <- WorkItem{id, spec.String()}
+	out := make(chan Result, 100)
+	go test.Start(out)
+	fmt.Println("***************** Test started")
+	// Race Condition
+	time.Sleep(1 * time.Millisecond)
+	fmt.Println(test.IsRunning())
+	test.Wait()
+	fmt.Println("***************** Test finished")
+	for id, r := range collectResults(out) {
+		fmt.Printf("%s: Request duration percentiles\n", id)
+		for p, d := range calculateDurationPercentiles(r) {
+			fmt.Printf("%d%%: %v\n", int(p*100), d)
 		}
 	}
-	close(in)
-
-	// Collect results
-	results := make(map[string][]Result)
-	for i := 0; i < numRequests*len(urlSpecs); i++ {
-		r := <-out
-
-		results[r.ID] = append(results[r.ID], r)
-		fmt.Printf("%s: %s [%d] [%d ms]\n", r.ID, r.URL, r.StatusCode, r.RequestDuration/time.Millisecond)
-	}
-	wg.Wait()
-	close(out)
-
-	// calculate request time percentiles
-	for id, rs := range results {
-		ds := make([]time.Duration, len(rs))
-		for i, v := range rs {
-			ds[i] = v.RequestDuration
-		}
-		fmt.Println(id)
-		fmt.Println(calculateDurationPercentiles(ds))
-
-	}
+	fmt.Println(test.IsRunning())
 
 }

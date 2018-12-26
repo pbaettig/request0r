@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -15,44 +16,58 @@ type Test struct {
 	Concurrency int
 	Delay       time.Duration
 	running     bool
+	waitgroup   *sync.WaitGroup
 }
 
 func (t *Test) Start(out chan Result) {
-	in := make(chan string, len(t.Specs)*t.NumRequests)
-	wg := new(sync.WaitGroup)
+	in := make(chan WorkItem, len(t.Specs)*t.NumRequests)
+	t.waitgroup = new(sync.WaitGroup)
 
 	// Start Workers
-	for i := 0; i < len(t.Specs); i++ {
-		go worker(wg, in, out)
+	for i := 0; i < t.Concurrency; i++ {
+		go worker(fmt.Sprintf("%s-%d", t.ID, i), t.waitgroup, in, out)
+		t.waitgroup.Add(1)
 	}
 	t.running = true
 
 	// Populate in channel
 	for _, spec := range t.Specs {
-		for i := 0; i < numRequests; i++ {
-			in <- spec.String()
+		for i := 0; i < t.NumRequests; i++ {
+			in <- WorkItem{ID: t.ID, URL: spec.String(), Delay: t.Delay}
 		}
 	}
 	close(in)
 
 	go func() {
-		wg.Wait()
+		t.waitgroup.Wait()
+		fmt.Printf("%s finished.\n", t.ID)
 		t.running = false
+		close(out)
 	}()
+}
+
+func (t *Test) Wait() {
+	t.waitgroup.Wait()
 }
 
 func (t *Test) IsRunning() bool {
 	return t.running
 }
 
-func worker(wg *sync.WaitGroup, in <-chan string, out chan<- Result) {
-	defer wg.Done()
-	for url := range in {
+func worker(id string, wg *sync.WaitGroup, in <-chan WorkItem, out chan<- Result) {
+	processed := 0
+	fmt.Printf("Worker %s started.\n", id)
+	defer func() {
+		fmt.Printf("Worker %s finished. Processed %d items.\n", id, processed)
+		wg.Done()
+	}()
+	for wi := range in {
 		var result Result
-		result.URL = url
+		result.ID = wi.ID
+		result.URL = wi.URL
 
 		start := time.Now()
-		resp, err := http.Get(url)
+		resp, err := http.Get(wi.URL)
 		if err != nil {
 			result.Error = err
 		} else {
@@ -64,13 +79,19 @@ func worker(wg *sync.WaitGroup, in <-chan string, out chan<- Result) {
 		result.RequestDuration = time.Now().Sub(start)
 
 		out <- result
+		processed++
+
+		if wi.Delay > 0 {
+			time.Sleep(wi.Delay)
+		}
 
 	}
 }
 
 type WorkItem struct {
-	ID  string
-	URL string
+	ID    string
+	URL   string
+	Delay time.Duration
 }
 
 type Result struct {
