@@ -15,11 +15,6 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-const (
-	numRequests       = 10
-	concurrencyFactor = 5
-)
-
 func calculateDurationPercentiles(rs []Result) map[float64]time.Duration {
 	// convert duration to int to facilitate sorting
 	ints := make([]int, len(rs))
@@ -77,16 +72,18 @@ func collectResults(out <-chan Result) map[string][]Result {
 }
 
 func main() {
+	statusWc := new(WorkerConfig)
+	statusWc.RequestsPerSecond = 100
 	tests := []Test{
 		Test{
-			ID:          "status-test",
-			NumRequests: 100,
-			Concurrency: 4,
-			Delay:       0,
+			ID:           "status-test",
+			NumRequests:  5000,
+			Concurrency:  50,
+			WorkerConfig: NewWorkerConfig(150),
 			Specs: []randurl.URLSpec{
 				randurl.URLSpec{
 					Scheme: "http",
-					Host:   "httpbin.org",
+					Host:   "localhost:8080",
 					Components: []randurl.PathComponent{
 						randurl.StringComponent("status"),
 						randurl.IntegerComponent{Min: 100, Max: 511},
@@ -98,7 +95,6 @@ func main() {
 			ID:          "delay-test",
 			NumRequests: 50,
 			Concurrency: 50,
-			Delay:       0, //100 * time.Millisecond,
 			Specs: []randurl.URLSpec{
 				randurl.URLSpec{
 					Scheme: "http",
@@ -111,17 +107,21 @@ func main() {
 			},
 		},
 	}
-	test := tests[1]
+	test := tests[0]
 
 	out := make(chan Result, 100)
-	go test.Start(out)
+	test.Start(out)
 	fmt.Println("***************** Test started")
-	// Race Condition
-	time.Sleep(1 * time.Millisecond)
 	fmt.Println(test.IsRunning())
+	fmt.Println("Waiting for test to finish...")
 	test.Wait()
+
+	for s := range test.WorkerConfig.StatsChannel {
+		fmt.Printf("%#v\n", s)
+	}
+
 	fmt.Println("***************** Test finished")
-	for id, r := range collectResults(out) {
+	for id, r := range collectResults(test.WorkerConfig.OutChannel) {
 		fmt.Printf("%s: Request duration percentiles\n", id)
 		for p, d := range calculateDurationPercentiles(r) {
 			fmt.Printf("%d%%: %v\n", int(p*100), d)
