@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"fmt"
 	"net/http"
@@ -167,7 +168,7 @@ type WorkerStats struct {
 
 	}
 
-} */
+}
 
 type WorkItem struct {
 	ID    string
@@ -184,3 +185,4 @@ type Result struct {
 	Header          http.Header
 	Error           error
 }
+*/

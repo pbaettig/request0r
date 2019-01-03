@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 	"math/rand"
-	"net/http"
+	"net/url"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/pbaettig/randurl"
@@ -15,29 +14,63 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func calculateDurationPercentiles(rs []Result) map[float64]time.Duration {
-	// convert duration to int to facilitate sorting
-	ints := make([]int, len(rs))
-	for i, r := range rs {
-		ints[i] = int(r.RequestDuration)
+func collectResults(c chan WorkerResult) []WorkerResult {
+	var rs []WorkerResult
+	for r := range c {
+		rs = append(rs, r)
 	}
-	sort.Ints(ints)
+	return rs
+}
 
-	percentiles := [...]float64{0.01, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.99}
+func countResponseStatusCodes(rs []WorkerResult) map[int]int {
+	sc := make(map[int]int)
+	for _, r := range rs {
+		if _, ok := sc[r.StatusCode]; !ok {
+			sc[r.StatusCode] = 1
+		} else {
+			sc[r.StatusCode]++
+		}
+
+	}
+	return sc
+}
+
+func getErrors(rs []WorkerResult) []*url.Error {
+	var errors []*url.Error
+	for _, r := range rs {
+		if r.Error == nil {
+			continue
+		}
+		errors = append(errors, r.Error)
+
+	}
+	return errors
+}
+
+func getDurationPercentiles(rs []WorkerResult) map[float64]time.Duration {
+	var durations []int
+	for _, r := range rs {
+		durations = append(durations, int(r.RequestDuration))
+	}
+
+	sort.Ints(durations)
+
+	percentiles := [...]float64{0.01, 0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.95, 0.99}
 
 	// prepare return value
 	ret := make(map[float64]time.Duration)
 
 	for _, p := range percentiles {
-		length := float64(len(rs))
+		length := float64(len(durations))
 		index := length * p
-		ret[p] = time.Duration(ints[int(index)])
+		ret[p] = time.Duration(durations[int(index)])
 
 	}
 
 	return ret
 }
 
+/*
 func requestWorker(wg *sync.WaitGroup, in <-chan WorkItem, out chan<- Result) {
 	defer wg.Done()
 	for wi := range in {
@@ -61,72 +94,71 @@ func requestWorker(wg *sync.WaitGroup, in <-chan WorkItem, out chan<- Result) {
 
 	}
 }
+*/
 
-func collectResults(out <-chan Result) map[string][]Result {
-	ret := make(map[string][]Result)
-	for r := range out {
-		ret[r.ID] = append(ret[r.ID], r)
-		//fmt.Printf("%s: %s [%d] [%d ms]\n", r.ID, r.URL, r.StatusCode, r.RequestDuration/time.Millisecond)
-	}
-	return ret
-}
+// func collectResults(out <-chan WorkerResult) map[string][]WorkerResult {
+// 	ret := make(map[string][]WorkerResult)
+// 	for r := range out {
+// 		ret[r.ID] = append(ret[r.ID], r)
+// 		//fmt.Printf("%s: %s [%d] [%d ms]\n", r.ID, r.URL, r.StatusCode, r.RequestDuration/time.Millisecond)
+// 	}
+// 	return ret
+// }
 
 func main() {
-	statusWc := new(WorkerConfig)
-	statusWc.RequestsPerSecond = 100
-	tests := []Test{
-		Test{
-			ID:           "status-test",
-			NumRequests:  5000,
-			Concurrency:  50,
-			WorkerConfig: NewWorkerConfig(150),
-			Specs: []randurl.URLSpec{
-				randurl.URLSpec{
-					Scheme: "http",
-					Host:   "localhost:8080",
-					Components: []randurl.PathComponent{
-						randurl.StringComponent("status"),
-						randurl.IntegerComponent{Min: 100, Max: 511},
-					},
-				},
-			},
-		},
-		Test{
-			ID:          "delay-test",
-			NumRequests: 50,
-			Concurrency: 50,
-			Specs: []randurl.URLSpec{
-				randurl.URLSpec{
-					Scheme: "http",
-					Host:   "httpbin.org",
-					Components: []randurl.PathComponent{
-						randurl.StringComponent("delay"),
-						randurl.IntegerComponent{Min: 1, Max: 2},
-					},
+
+	test := Test{
+		ID:          "status-test",
+		NumRequests: 100000,
+		Concurrency: 100,
+		//TargetRequestsPerSecond: 5000,
+		Specs: []randurl.URLSpec{
+			randurl.URLSpec{
+				Scheme: "http",
+				Host:   "localhost:8080",
+				Components: []randurl.PathComponent{
+					randurl.StringComponent("data"),
+					randurl.IntegerComponent{Min: 1024, Max: 1288},
+					// randurl.RandomStringComponent{
+					// 	Format:    "user-%s",
+					// 	Chars:     []rune(randurl.DigitChars),
+					// 	MinLength: 4,
+					// 	MaxLength: 8,
+					// },
+					//randurl.IntegerComponent{Min: 200, Max: 511},
+					//randurl.HTTPStatus{Ranges: []int{400, 200}},
 				},
 			},
 		},
 	}
-	test := tests[0]
 
-	out := make(chan Result, 100)
-	test.Start(out)
+	test.Start()
 	fmt.Println("***************** Test started")
-	fmt.Println(test.IsRunning())
-	fmt.Println("Waiting for test to finish...")
-	test.Wait()
 
-	for s := range test.WorkerConfig.StatsChannel {
-		fmt.Printf("%#v\n", s)
-	}
-
-	fmt.Println("***************** Test finished")
-	for id, r := range collectResults(test.WorkerConfig.OutChannel) {
-		fmt.Printf("%s: Request duration percentiles\n", id)
-		for p, d := range calculateDurationPercentiles(r) {
-			fmt.Printf("%d%%: %v\n", int(p*100), d)
+	// Display Status and collect results
+	results := make([]WorkerResult, 0)
+	go func() {
+		i := 0
+		for r := range test.Out {
+			i++
+			results = append(results, r)
+			if i%(test.NumRequests/20) == 0 {
+				fmt.Printf("\r%d%% complete", i*100/test.NumRequests)
+			}
 		}
+		fmt.Println()
+	}()
+
+	test.Wait()
+	fmt.Println("***************** Test finished")
+
+	fmt.Println(countResponseStatusCodes(results))
+	fmt.Println(getErrors(results))
+	dpc := getDurationPercentiles(results)
+	for _, p := range []float64{0.99, 0.95, 0.8, 0.5, 0.1, 0.01} {
+		fmt.Printf("%d%%:\t%s\n", int(p*100), dpc[p])
 	}
+
 	fmt.Println(test.IsRunning())
 
 }
