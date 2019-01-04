@@ -21,7 +21,7 @@ var (
 func init() {
 	rand.Seed(time.Now().UnixNano())
 
-	flag.StringVar(&testsFilename, "filename", "", "Path to file containing the test definitions")
+	flag.StringVar(&testsFilename, "tests", "", "Path to file containing the test definitions")
 	flag.BoolVar(&debug, "debug", false, "Enable verbose debug logging")
 }
 
@@ -36,6 +36,8 @@ it received.`)
 }
 
 func main() {
+	flag.Parse()
+
 	if debug {
 		log.SetLevel(log.DebugLevel)
 	} else {
@@ -47,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tests, err := app.LoadTestsFromFile("/home/bpc/go/src/github.com/pbaettig/request0r/tests.yaml")
+	tests, err := app.LoadTestsFromFile(testsFilename)
 	if err != nil {
 		log.Fatalln("Unable to load tests from file.")
 	}
@@ -99,7 +101,7 @@ func main() {
 	time.Sleep(200 * time.Millisecond)
 	fmt.Printf("\n-----------------------\n\n")
 	for id, results := range testResults {
-		fmt.Printf("# Results for %s\n", id)
+		fmt.Printf("# Results for test \"%s\"\n", id)
 		fmt.Println("## Respone duration Percentiles")
 		pd := resultutils.GetDurationPercentiles(results)
 		fmt.Printf("%d%%\t%s\n", 99, pd[0.99])
