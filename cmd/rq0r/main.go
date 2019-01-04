@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 
@@ -11,12 +13,39 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	testsFilename string
+	debug         bool
+)
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
+
+	flag.StringVar(&testsFilename, "filename", "", "Path to file containing the test definitions")
+	flag.BoolVar(&debug, "debug", false, "Enable verbose debug logging")
+}
+
+func usage() {
+	fmt.Println(`rq0r executes HTTP tests described in a YAML file. It's purpose is to provide an
+easy way to generate load on a target service and provide some statistics about the responses
+it received.`)
+	fmt.Println()
+
+	fmt.Println("PARAMETERS:")
+	flag.PrintDefaults()
 }
 
 func main() {
-	log.SetLevel(log.DebugLevel)
+	if debug {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.InfoLevel)
+	}
+
+	if testsFilename == "" {
+		usage()
+		os.Exit(1)
+	}
 
 	tests, err := app.LoadTestsFromFile("/home/bpc/go/src/github.com/pbaettig/request0r/tests.yaml")
 	if err != nil {
@@ -36,13 +65,13 @@ func main() {
 
 		log.WithFields(log.Fields{
 			"test": test.ID,
-		}).Info("Test started")
+		}).Info("Started")
 
 		go func(t *app.Test, wg *sync.WaitGroup) {
 			t.Wait()
 			log.WithFields(log.Fields{
 				"test": t.ID,
-			}).Debug("Finished")
+			}).Info("Finished")
 			wg.Done()
 
 			i := 0
@@ -64,10 +93,10 @@ func main() {
 
 	log.Info("Waiting for all tests to finish...")
 	testWait.Wait()
-	log.Info("All done.")
+
 	// sleep some more to ensure any remaining log output is not
 	// mixed in with the results below
-	time.Sleep(4 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 	fmt.Printf("\n-----------------------\n\n")
 	for id, results := range testResults {
 		fmt.Printf("# Results for %s\n", id)
