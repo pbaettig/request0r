@@ -1,46 +1,31 @@
 tests:
-  - id: user-test
-    numRequests: 500
-    concurrency: 12
+  - id: user
+    numRequests: 6
+    concurrency: 3
     urlSpecs:
       - scheme: http
-        host: httpbin.org
+        host: localhost:8080
         uriComponents:
           - type: string
-            value: user
-          - type: randomString
-            chars: abcdef0123456789
-            minLength: 7
-            maxLength: 7
-            format: "user-%s"
-          - type: string
-            value: delete
+            value: status
+          - type: httpStatus
+            ranges:
+              - 500
+
         
-  - id: test1
-    numRequests: 5000
-    concurrency: 50
+  - id: delay
+    numRequests: 8
+    concurrency: 4
     targetRequestsPerSecond: 120
     urlSpecs:
       - scheme: http
-        host: httpbin.org
+        host: localhost:8080
         uriComponents:
           - type: string
-            value: delay
-          - type: integer
-            min: 2
-            max: 4
-      - scheme: http
-        host: httpbin.org
-        uriComponents:
-          - type: string
-            value: user
+            value: longrunning
           - type: randomString
-            minLength: 7
-            maxLength: 7
-            chars: abcdef0123456789
-            format: "user-%s"
-          - type: httpStatus
-            ranges:
-              - 100
-              - 200
-              - 300
+            chars: "4567"
+            minLength: 2
+            maxLength: 5
+            format: "%sms"
+      

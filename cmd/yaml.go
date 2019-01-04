@@ -1,87 +1,74 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
-	"log"
-	"sync"
 
 	"github.com/pbaettig/randurl"
-
 	yaml "gopkg.in/yaml.v2"
 )
 
-type TestYaml struct {
+// Stub for parsing root of yaml document
+type doc struct {
+	Tests []testYaml `yaml:"tests"`
+}
+
+// Stub for parsing Test objects
+type testYaml struct {
 	ID                      string        `yaml:"id"`
-	Specs                   []URLSpecYaml `yaml:"urlSpecs"`
+	Specs                   []urlSpecYaml `yaml:"urlSpecs"`
 	NumRequests             int           `yaml:"numRequests"`
 	TargetRequestsPerSecond int           `yaml:"targetRequestsPerSecond"`
 	Concurrency             int           `yaml:"concurrency"`
-	// Out                     chan WorkerResult
-	// Stats                   chan WorkerStats
-	// in                      chan string
-
-	// running   bool
-	// waitGroup *sync.WaitGroup
 }
-type URLSpecYaml struct {
+
+// Stub for parsing randurl.URLSpec
+type urlSpecYaml struct {
 	Scheme     string                        `yaml:"scheme"`
 	Host       string                        `yaml:"host"`
 	Components []map[interface{}]interface{} `yaml:"uriComponents"`
 }
 
-type PathComponent struct {
-	ComponentType string `yaml:"type"`
-}
+func loadTestsFromFile(path string) ([]*Test, error) {
+	// This slice is filled with the final Test objects
+	var loadedTests []*Test
 
-type doc struct {
-	Tests []TestYaml
-}
-
-type Test struct {
-	ID                      string
-	Specs                   []randurl.URLSpec
-	NumRequests             int
-	TargetRequestsPerSecond int
-	Concurrency             int
-	Out                     chan string
-	Stats                   chan string
-	in                      chan string
-
-	running   bool
-	waitGroup *sync.WaitGroup
-}
-
-func main() {
 	// data, err := ioutil.ReadFile("components.yaml")
-	data, err := ioutil.ReadFile("tests.yaml")
+	data, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.Fatalln("Unable to open file")
+		return loadedTests, err
 	}
 
-	//m := make(map[interface{}]interface{})
+	// Load list of testYaml into m
 	m := new(doc)
-	// m := new(map[interface{}]interface{})
 	err = yaml.Unmarshal([]byte(data), &m)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return loadedTests, err
 	}
-	fmt.Printf("%#v\n", m.Tests[0].Specs[0].Components)
-	for _, test := range m.Tests {
-		pTest := Test{
-			ID:                      test.ID,
-			Concurrency:             test.Concurrency,
-			NumRequests:             test.NumRequests,
-			TargetRequestsPerSecond: test.TargetRequestsPerSecond,
-		}
 
-		for _, urlSpec := range test.Specs {
+	// Go thrhough all testYaml structs
+	for _, mt := range m.Tests {
+		// Prepare the proper Test object, whill be added to
+		// loadedtests once all of its members have been populated
+		lt := Test{
+			ID:                      mt.ID,
+			Concurrency:             mt.Concurrency,
+			NumRequests:             mt.NumRequests,
+			TargetRequestsPerSecond: mt.TargetRequestsPerSecond,
+		}
+		// Go through all urlSpecYaml structs in mt
+		for _, urlSpec := range mt.Specs {
+			// Prepare the Proper randurl.URLSpec object, whill will be
+			// stored in lt.Specs
 			spec := randurl.URLSpec{
 				Scheme: urlSpec.Scheme,
 				Host:   urlSpec.Host,
 			}
-			for i, c := range urlSpec.Components {
-				fmt.Printf("======== %d =======\n", i)
+
+			// Go through all uriComponents in urlSpecYaml
+			// They are untyped, the logic below determines
+			// the appropriate type by looking at the "type" field
+			// and constructs the correct object
+			for _, c := range urlSpec.Components {
 				t, ok := c["type"]
 				if !ok {
 					continue
@@ -115,9 +102,9 @@ func main() {
 				}
 
 			}
-			pTest.Specs = append(pTest.Specs, spec)
+			lt.Specs = append(lt.Specs, spec)
 		}
-		fmt.Printf("%#v", pTest)
+		loadedTests = append(loadedTests, &lt)
 	}
-
+	return loadedTests, nil
 }

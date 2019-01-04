@@ -5,9 +5,10 @@ import (
 	"math/rand"
 	"net/url"
 	"sort"
+	"sync"
 	"time"
 
-	"github.com/pbaettig/randurl"
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -25,9 +26,7 @@ func collectResults(c chan WorkerResult) []WorkerResult {
 func countResponseStatusCodes(rs []WorkerResult) map[int]int {
 	sc := make(map[int]int)
 	for _, r := range rs {
-		if _, ok := sc[r.StatusCode]; !ok {
-			sc[r.StatusCode] = 1
-		} else {
+		if r.Error == nil {
 			sc[r.StatusCode]++
 		}
 
@@ -70,95 +69,105 @@ func getDurationPercentiles(rs []WorkerResult) map[float64]time.Duration {
 	return ret
 }
 
-/*
-func requestWorker(wg *sync.WaitGroup, in <-chan WorkItem, out chan<- Result) {
-	defer wg.Done()
-	for wi := range in {
-		var result Result
-		result.ID = wi.ID
-		result.URL = wi.URL
-
-		start := time.Now()
-		resp, err := http.Get(wi.URL)
-		if err != nil {
-			result.Error = err
-		} else {
-			defer resp.Body.Close()
-			result.StatusCode = resp.StatusCode
-			result.Header = resp.Header
-			result.ContentLength = resp.ContentLength
-		}
-		result.RequestDuration = time.Now().Sub(start)
-
-		out <- result
-
-	}
-}
-*/
-
-// func collectResults(out <-chan WorkerResult) map[string][]WorkerResult {
-// 	ret := make(map[string][]WorkerResult)
-// 	for r := range out {
-// 		ret[r.ID] = append(ret[r.ID], r)
-// 		//fmt.Printf("%s: %s [%d] [%d ms]\n", r.ID, r.URL, r.StatusCode, r.RequestDuration/time.Millisecond)
-// 	}
-// 	return ret
-// }
-
 func main() {
+	log.SetLevel(log.DebugLevel)
 
-	test := Test{
-		ID:          "status-test",
-		NumRequests: 100000,
-		Concurrency: 100,
-		//TargetRequestsPerSecond: 5000,
-		Specs: []randurl.URLSpec{
-			randurl.URLSpec{
-				Scheme: "http",
-				Host:   "localhost:8080",
-				Components: []randurl.PathComponent{
-					randurl.StringComponent("data"),
-					randurl.IntegerComponent{Min: 1024, Max: 1288},
-					// randurl.RandomStringComponent{
-					// 	Format:    "user-%s",
-					// 	Chars:     []rune(randurl.DigitChars),
-					// 	MinLength: 4,
-					// 	MaxLength: 8,
-					// },
-					//randurl.IntegerComponent{Min: 200, Max: 511},
-					//randurl.HTTPStatus{Ranges: []int{400, 200}},
-				},
-			},
-		},
+	tests, err := loadTestsFromFile("../tests.yaml")
+	if err != nil {
+		log.Fatalln("Unable to load tests from file.")
 	}
 
-	test.Start()
-	fmt.Println("***************** Test started")
+	if len(tests) == 0 {
+		log.Fatalln("No tests defined.")
+	}
 
-	// Display Status and collect results
-	results := make([]WorkerResult, 0)
-	go func() {
-		i := 0
-		for r := range test.Out {
-			i++
-			results = append(results, r)
-			if i%(test.NumRequests/20) == 0 {
-				fmt.Printf("\r%d%% complete", i*100/test.NumRequests)
+	testWait := new(sync.WaitGroup)
+	testResults := make(map[string][]WorkerResult)
+
+	for _, test := range tests {
+		test.Start()
+		testWait.Add(1)
+
+		log.WithFields(log.Fields{
+			"test": test.ID,
+		}).Info("Test started")
+
+		go func(t *Test, wg *sync.WaitGroup) {
+			t.Wait()
+			log.WithFields(log.Fields{
+				"test": t.ID,
+			}).Debug("Finished")
+			wg.Done()
+
+			i := 0
+			log.WithFields(log.Fields{
+				"test": t.ID,
+			}).Debugf("Reading results from %p", t.Out)
+			for r := range t.Out {
+				i++
+				testResults[t.ID] = append(testResults[t.ID], r)
+				log.WithFields(log.Fields{
+					"test": t.ID,
+				}).Debugf("Got result for %s (%d/%d)", r.URL, i, t.NumRequests)
 			}
+			log.WithFields(log.Fields{
+				"test": t.ID,
+			}).Debug("All results processed")
+		}(test, testWait)
+	}
+
+	log.Info("Waiting for all tests to finish...")
+	testWait.Wait()
+	log.Info("All done.")
+	// sleep some more to ensure any remaining log output is not
+	// mixed in with the results below
+	time.Sleep(200 * time.Millisecond)
+	fmt.Printf("\n-----------------------\n\n")
+	for id, results := range testResults {
+		fmt.Printf("# Results for %s\n", id)
+		fmt.Println("## Respone duration Percentiles")
+		pd := getDurationPercentiles(results)
+		fmt.Printf("%d%%\t%s\n", 99, pd[0.99])
+		fmt.Printf("%d%%\t%s\n", 95, pd[0.95])
+		fmt.Printf("%d%%\t%s\n", 90, pd[0.9])
+		fmt.Printf("%d%%\t%s\n", 50, pd[0.5])
+		fmt.Printf("%d%%\t%s\n", 10, pd[0.1])
+		fmt.Printf("%d%%\t%s\n", 1, pd[0.01])
+		fmt.Println()
+		fmt.Println("## Errors")
+		errors := getErrors(results)
+		errorPercent := float64(len(errors)) * 100.0 / float64(len(results))
+		if errorPercent > 0 {
+			fmt.Printf("%.1f%% (%d/%d) of requests failed.\n", errorPercent, len(errors), len(results))
+
+			if len(errors) <= 10 {
+				fmt.Println("Error messages:")
+				for _, e := range errors {
+					fmt.Printf("- %s\n", e)
+				}
+			} else {
+				fmt.Println("More than 10 errors occured. First 10 error messages:")
+				for _, e := range errors[:10] {
+					fmt.Printf("- %s\n", e)
+				}
+			}
+
+			fmt.Println()
+
+		} else {
+			fmt.Println("No errors occured.")
 		}
 		fmt.Println()
-	}()
-
-	test.Wait()
-	fmt.Println("***************** Test finished")
-
-	fmt.Println(countResponseStatusCodes(results))
-	fmt.Println(getErrors(results))
-	dpc := getDurationPercentiles(results)
-	for _, p := range []float64{0.99, 0.95, 0.8, 0.5, 0.1, 0.01} {
-		fmt.Printf("%d%%:\t%s\n", int(p*100), dpc[p])
+		fmt.Println("## Response Status codes")
+		sum := 0
+		for s, c := range countResponseStatusCodes(results) {
+			p := float64(c) / float64(len(results))
+			fmt.Printf("HTTP%d\t%.1f%%\t(%d)\n", s, p*100, c)
+			sum += c
+		}
+		fmt.Printf("\t\t(%d total)", sum)
+		fmt.Println()
+		fmt.Println()
 	}
-
-	fmt.Println(test.IsRunning())
 
 }
