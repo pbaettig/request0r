@@ -1,5 +1,5 @@
 # tests
-A list of Tests (see below)
+A list of Tests (see below). Look at [tests.yaml](tests.yaml) for examples.
 
 # Test
 ## id
