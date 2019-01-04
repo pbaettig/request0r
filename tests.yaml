@@ -1,7 +1,7 @@
 tests:
   - id: user
-    numRequests: 6
-    concurrency: 3
+    numRequests: 6000
+    concurrency: 300
     urlSpecs:
       - scheme: http
         host: localhost:8080
