@@ -53,7 +53,7 @@ func main() {
 
 	tests, err := app.LoadTestsFromFile(testsFilename)
 	if err != nil {
-		log.Fatalln("Unable to load tests from file.")
+		log.Fatalf("Unable to load tests from file: %s", err)
 	}
 
 	if len(tests) == 0 {
