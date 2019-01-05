@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pbaettig/request0r/internal/pkg/statutils"
+
 	"github.com/pbaettig/request0r/internal/app"
 	"github.com/pbaettig/request0r/internal/pkg/resultutils"
 	log "github.com/sirupsen/logrus"
@@ -60,7 +62,9 @@ func main() {
 
 	testWait := new(sync.WaitGroup)
 	testResults := make(map[string][]app.WorkerResult)
+	testStats := make(map[string][]app.WorkerStats)
 
+	testStart := time.Now()
 	for _, test := range tests {
 		test.Start()
 		testWait.Add(1)
@@ -76,10 +80,17 @@ func main() {
 			}).Info("Finished")
 			wg.Done()
 
+			// Collect worker stats
+			for s := range t.Stats {
+				testStats[t.ID] = append(testStats[t.ID], s)
+			}
+
 			i := 0
 			log.WithFields(log.Fields{
 				"test": t.ID,
 			}).Debugf("Reading results from %p", t.Out)
+
+			// Collect test results
 			for r := range t.Out {
 				i++
 				testResults[t.ID] = append(testResults[t.ID], r)
@@ -95,15 +106,25 @@ func main() {
 
 	log.Info("Waiting for all tests to finish...")
 	testWait.Wait()
+	testsDuration := time.Now().Sub(testStart)
+	log.Infof("Ran %d Tests in %s", len(tests), testsDuration)
 
 	// sleep some more to ensure any remaining log output is not
 	// mixed in with the results below
 	time.Sleep(200 * time.Millisecond)
 	fmt.Printf("\n-----------------------\n\n")
-	for id, results := range testResults {
-		fmt.Printf("# Results for test \"%s\"\n", id)
+	for _, test := range tests {
+		fmt.Printf("# Results for test \"%s\"\n", test.ID)
+		fmt.Println("## Worker Stats")
+		fmt.Printf("Worker Runtime\n")
+		for _, s := range testStats[test.ID] {
+			fmt.Printf("%s:\t%.1f requests/second\t%d requests processed\t(in %s)\n", s.ID, s.RequestsPerSecond, s.RequestsProcessed, s.Runtime)
+		}
+		trps := statutils.SumRequestsPerSecond(testStats[test.ID])
+		fmt.Printf("\t\t%.1f total\t\t%d total\n", trps, test.NumRequests)
+		fmt.Println()
 		fmt.Println("## Respone duration Percentiles")
-		pd := resultutils.GetDurationPercentiles(results)
+		pd := resultutils.GetDurationPercentiles(testResults[test.ID])
 		fmt.Printf("%d%%\t%s\n", 99, pd[0.99])
 		fmt.Printf("%d%%\t%s\n", 95, pd[0.95])
 		fmt.Printf("%d%%\t%s\n", 90, pd[0.9])
@@ -112,10 +133,10 @@ func main() {
 		fmt.Printf("%d%%\t%s\n", 1, pd[0.01])
 		fmt.Println()
 		fmt.Println("## Errors")
-		errors := resultutils.GetErrors(results)
-		errorPercent := float64(len(errors)) * 100.0 / float64(len(results))
+		errors := resultutils.GetErrors(testResults[test.ID])
+		errorPercent := float64(len(errors)) * 100.0 / float64(len(testResults[test.ID]))
 		if errorPercent > 0 {
-			fmt.Printf("%.1f%% (%d/%d) of requests failed.\n", errorPercent, len(errors), len(results))
+			fmt.Printf("%.1f%% (%d/%d) of requests failed.\n", errorPercent, len(errors), len(testResults[test.ID]))
 
 			if len(errors) <= 10 {
 				fmt.Println("Error messages:")
@@ -137,8 +158,8 @@ func main() {
 		fmt.Println()
 		fmt.Println("## Response Status codes")
 		sum := 0
-		for s, c := range resultutils.CountResponseStatusCodes(results) {
-			p := float64(c) / float64(len(results))
+		for s, c := range resultutils.CountResponseStatusCodes(testResults[test.ID]) {
+			p := float64(c) / float64(len(testResults[test.ID]))
 			fmt.Printf("HTTP%d\t%.1f%%\t(%d)\n", s, p*100, c)
 			sum += c
 		}

@@ -116,6 +116,10 @@ func (t *Test) runWorker(id string) {
 	defer func(t Test) {
 		rt := time.Now().Sub(workerStart)
 
+		log.WithFields(log.Fields{
+			"test":   t.ID,
+			"worker": id,
+		}).Debugf("Putting stats out to Stats channel %p", t.Stats)
 		t.Stats <- WorkerStats{
 			ID:                id,
 			RequestsPerSecond: float64(processed) / rt.Seconds(),
