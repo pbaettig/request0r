@@ -2,9 +2,12 @@ package app
 
 import (
 	"io/ioutil"
+	"strconv"
 
 	"github.com/pbaettig/request0r/pkg/randurl"
 	yaml "gopkg.in/yaml.v2"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Stub for parsing root of yaml document
@@ -26,6 +29,36 @@ type urlSpecYaml struct {
 	Scheme     string                        `yaml:"scheme"`
 	Host       string                        `yaml:"host"`
 	Components []map[interface{}]interface{} `yaml:"uriComponents"`
+}
+
+func castString(sourceValue interface{}) string {
+	switch sourceValue.(type) {
+	case string:
+		return sourceValue.(string)
+	case int:
+		return strconv.Itoa(sourceValue.(int))
+	default:
+		log.Fatalln("Uh oh")
+	}
+
+	return ""
+}
+
+func castInt(sourceValue interface{}) int {
+	switch sourceValue.(type) {
+	case int:
+		return sourceValue.(int)
+	case string:
+		i, err := strconv.Atoi(sourceValue.(string))
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+		return i
+	default:
+		log.Fatalln("Uh oh")
+	}
+
+	return 0
 }
 
 // LoadTestsFromFile parses the specified yaml file and return a slice of *Test
@@ -76,24 +109,24 @@ func LoadTestsFromFile(path string) ([]*Test, error) {
 				}
 				switch t {
 				case "string":
-					spec.Components = append(spec.Components, randurl.StringComponent(c["value"].(string)))
+					spec.Components = append(spec.Components, randurl.StringComponent(castString(c["value"])))
 				case "integer":
 					spec.Components = append(spec.Components, randurl.IntegerComponent{
-						Min: c["min"].(int),
-						Max: c["max"].(int),
+						Min: castInt(c["min"]),
+						Max: castInt(c["max"]),
 					})
 				case "randomString":
 					spec.Components = append(spec.Components, randurl.RandomStringComponent{
-						MinLength: c["minLength"].(int),
-						MaxLength: c["maxLength"].(int),
-						Chars:     []rune(c["chars"].(string)),
-						Format:    c["format"].(string),
+						MinLength: castInt(c["minLength"]),
+						MaxLength: castInt(c["maxLength"]),
+						Chars:     []rune(castString(c["chars"])),
+						Format:    castString(c["format"]),
 					})
 
 				case "httpStatus":
 					ns := make([]int, 0)
 					for _, n := range c["ranges"].([]interface{}) {
-						ns = append(ns, n.(int))
+						ns = append(ns, castInt(n))
 					}
 
 					spec.Components = append(spec.Components, randurl.HTTPStatus{
