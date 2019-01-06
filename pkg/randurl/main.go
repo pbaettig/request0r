@@ -38,11 +38,11 @@ var validStatuses = []int{100, 101, 102, 103, 200, 201, 202, 203, 204, 205, 206,
 	507, 508, 509, 510, 511,
 }
 
-type HTTPStatus struct {
+type HTTPStatusComponent struct {
 	Ranges []int
 }
 
-func (hs HTTPStatus) String() string {
+func (hs HTTPStatusComponent) String() string {
 	var vc []int
 	// Build a list of all valid codes that were requested in `Ranges`
 	for _, r := range hs.Ranges {

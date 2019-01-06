@@ -129,7 +129,7 @@ func LoadTestsFromFile(path string) ([]*Test, error) {
 						ns = append(ns, castInt(n))
 					}
 
-					spec.Components = append(spec.Components, randurl.HTTPStatus{
+					spec.Components = append(spec.Components, randurl.HTTPStatusComponent{
 						Ranges: ns,
 					})
 
