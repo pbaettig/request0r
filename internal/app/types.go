@@ -90,21 +90,6 @@ func (t *Test) IsRunning() bool {
 	return t.running
 }
 
-type WorkerResult struct {
-	URL             string
-	RequestDuration time.Duration
-	StatusCode      int
-	ContentLength   int64
-	Header          http.Header
-	Error           *url.Error
-}
-type WorkerStats struct {
-	ID                string
-	RequestsProcessed int
-	RequestsPerSecond float64
-	Runtime           time.Duration
-}
-
 func (t *Test) runWorker(id string) {
 	t.waitGroup.Add(1)
 	log.WithFields(log.Fields{
@@ -180,4 +165,19 @@ func (t *Test) runWorker(id string) {
 		}
 
 	}
+}
+
+type WorkerResult struct {
+	URL             string
+	RequestDuration time.Duration
+	StatusCode      int
+	ContentLength   int64
+	Header          http.Header
+	Error           *url.Error
+}
+type WorkerStats struct {
+	ID                string
+	RequestsProcessed int
+	RequestsPerSecond float64
+	Runtime           time.Duration
 }
