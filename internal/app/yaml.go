@@ -111,16 +111,15 @@ func LoadTestsFromFile(path string) ([]*Test, error) {
 				case "string":
 					spec.Components = append(spec.Components, randurl.StringComponent(castString(c["value"])))
 				case "integer":
-					spec.Components = append(spec.Components, randurl.IntegerComponent{
+					spec.Components = append(spec.Components, randurl.RandomIntegerComponent{
 						Min: castInt(c["min"]),
 						Max: castInt(c["max"]),
 					})
 				case "randomString":
+
 					spec.Components = append(spec.Components, randurl.RandomStringComponent{
-						MinLength: castInt(c["minLength"]),
-						MaxLength: castInt(c["maxLength"]),
-						Chars:     []rune(castString(c["chars"])),
-						Format:    castString(c["format"]),
+						Chars:  []rune(castString(c["chars"])),
+						Format: castString(c["format"]),
 					})
 
 				case "httpStatus":
@@ -129,7 +128,7 @@ func LoadTestsFromFile(path string) ([]*Test, error) {
 						ns = append(ns, castInt(n))
 					}
 
-					spec.Components = append(spec.Components, randurl.HTTPStatusComponent{
+					spec.Components = append(spec.Components, randurl.RandomHTTPStatusComponent{
 						Ranges: ns,
 					})
 

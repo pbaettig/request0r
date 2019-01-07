@@ -3,6 +3,7 @@ package randurl
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -38,11 +39,11 @@ var validStatuses = []int{100, 101, 102, 103, 200, 201, 202, 203, 204, 205, 206,
 	507, 508, 509, 510, 511,
 }
 
-type HTTPStatusComponent struct {
+type RandomHTTPStatusComponent struct {
 	Ranges []int
 }
 
-func (hs HTTPStatusComponent) String() string {
+func (hs RandomHTTPStatusComponent) String() string {
 	var vc []int
 	// Build a list of all valid codes that were requested in `Ranges`
 	for _, r := range hs.Ranges {
@@ -57,12 +58,12 @@ func (hs HTTPStatusComponent) String() string {
 
 }
 
-type IntegerComponent struct {
+type RandomIntegerComponent struct {
 	Min int
 	Max int
 }
 
-func (i IntegerComponent) String() string {
+func (i RandomIntegerComponent) String() string {
 	n := rand.Intn(i.Max-i.Min) + i.Min
 	return strconv.Itoa(n)
 }
@@ -76,27 +77,51 @@ const (
 )
 
 type RandomStringComponent struct {
-	Chars                []rune
-	Format               string
-	MinLength, MaxLength int
+	Chars  []rune
+	Format string
 }
 
-func (r RandomStringComponent) String() string {
+func makeRandomString(minLength, maxLength int, chars []rune) string {
 	var targetLength int
-	if r.MaxLength == r.MinLength {
-		targetLength = r.MaxLength
+	if maxLength == minLength {
+		targetLength = maxLength
 	} else {
-		targetLength = rand.Intn(r.MaxLength-r.MinLength) + r.MinLength
+		targetLength = rand.Intn(maxLength-minLength) + minLength
 	}
 
 	randomChars := make([]rune, targetLength)
 	for i := 0; i < targetLength; i++ {
-		randomChars[i] = r.Chars[rand.Intn(len(r.Chars))]
+		randomChars[i] = chars[rand.Intn(len(chars))]
 	}
 
-	if r.Format != "" {
-		return fmt.Sprintf(r.Format, string(randomChars))
-	}
 	return string(randomChars)
+}
+
+func (r RandomStringComponent) String() string {
+	// Set default format string if none was provided
+	if r.Format == "" {
+		r.Format = "%s"
+	}
+
+	// Regexp to identify the min,max values, if provided to the format spec
+	formatSpecRegex := regexp.MustCompile(`%(?P<min>\d+),(?P<max>\d+)s`)
+
+	// Make a slice containing all the format specs provided in the format string
+	formatSpecs := formatSpecRegex.FindAllString(r.Format, -1)
+
+	args := make([]interface{}, len(formatSpecs))
+	for i, f := range formatSpecs {
+		matches := formatSpecRegex.FindStringSubmatch(f)
+		if matches != nil {
+			min, _ := strconv.Atoi(matches[1])
+			max, _ := strconv.Atoi(matches[2])
+			args[i] = makeRandomString(min, max, r.Chars)
+		}
+
+	}
+
+	// Replace custom format specs with %s to make it compatible
+	// with golang format string
+	return fmt.Sprintf(formatSpecRegex.ReplaceAllString(r.Format, "%s"), args...)
 
 }

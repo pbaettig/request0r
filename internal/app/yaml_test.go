@@ -28,10 +28,8 @@ tests:
     - type: string
       value: user
     - type: randomString
-      minLength: 7
-      maxLength: 7
       chars: 1234abc
-      format: "user-%s"  
+      format: "user-%7,7s"  
     - type: integer
       min: 10
       max: 20
@@ -55,16 +53,14 @@ tests:
 				Components: []randurl.PathComponent{
 					randurl.StringComponent("user"),
 					randurl.RandomStringComponent{
-						MinLength: 7,
-						MaxLength: 7,
-						Chars:     []rune("1234abc"),
-						Format:    "user-%s",
+						Chars:  []rune("1234abc"),
+						Format: "user-%7,7s",
 					},
-					randurl.IntegerComponent{
+					randurl.RandomIntegerComponent{
 						Min: 10,
 						Max: 20,
 					},
-					randurl.HTTPStatusComponent{
+					randurl.RandomHTTPStatusComponent{
 						Ranges: []int{500},
 					},
 				},
@@ -105,14 +101,14 @@ tests:
 			if !reflect.DeepEqual(loaded, correct) {
 			}
 		case 2:
-			loaded := loadedTest.Specs[0].Components[i].(randurl.IntegerComponent)
-			correct := correctTest.Specs[0].Components[i].(randurl.IntegerComponent)
+			loaded := loadedTest.Specs[0].Components[i].(randurl.RandomIntegerComponent)
+			correct := correctTest.Specs[0].Components[i].(randurl.RandomIntegerComponent)
 			if !reflect.DeepEqual(loaded, correct) {
 				t.Errorf("Loaded test uriComponent[%d] is incorrect, wanted %+v, got %+v", i, correct, loaded)
 			}
 		case 3:
-			loaded := loadedTest.Specs[0].Components[i].(randurl.HTTPStatusComponent)
-			correct := correctTest.Specs[0].Components[i].(randurl.HTTPStatusComponent)
+			loaded := loadedTest.Specs[0].Components[i].(randurl.RandomHTTPStatusComponent)
+			correct := correctTest.Specs[0].Components[i].(randurl.RandomHTTPStatusComponent)
 			if !reflect.DeepEqual(loaded, correct) {
 				t.Errorf("Loaded test uriComponent[%d] is incorrect, wanted %+v, got %+v", i, correct, loaded)
 			}
