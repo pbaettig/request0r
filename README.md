@@ -1,41 +1,40 @@
-# tests
+
+# Config file format
+## tests
 A list of Tests (see below). Look at [tests.yaml](tests.yaml) for examples.
 
-# Test
-## id
+## Test
+### id
 String: Name of the test (required)
-## numRequests
+### numRequests
 Integer: Total number of requests to execute (required)
-## concurrency
+### concurrency
 Integer: Number of workers executing requests in parallel (required)
-## targetRequestsPerSecond
+### targetRequestsPerSecond
 Integer: Target rate of requests per second. If left empty or set to 0 no throttling will be performed.
-## urlSpecs
+### urlSpecs
 A list of URLSpec that define the URLs under test (required)
 
 ## URLSpec
 An URLSpec describes the components of an URL. The program will generate however many URLs it needs according to this specifications.
-## scheme
+### scheme
 String: Either http or https
-## host
+### host
 String: The host targeted by the test. If required a custom port can be specified as part of it.
-## uriComponents
+### uriComponents
 A list of PathComponents that describe the parts of the URI
 
-# PathComponent
+## PathComponent
 A URI consists of a number of PathComponents that are joined using "/". There are different PathComponents available:
-## type: string
+### type: string
 A static string value.
-### value
+#### value
 String: Value of the component (required)
-## type: randomString
+### type: randomString
 A random string value.
-### chars
+#### chars
 String: The characters that can be used to generate the string. (required)
-### minLength
-Integer: The minimum length of the generated string (required)
-### maxLength
-Integer: The maximum length of the generated string (required)
+
 ### format
 String: If specified this format string will be used for generating the string. %s is the only format literal you can use.
 ## type: integer
@@ -51,7 +50,7 @@ A valid HTTP status code
 A list of acceptable ranges for the generated code, e.g. 200, 300, 500 (required)
 
 # Test examples
-Run a test called `user-details`. Execute 400 requests from 10 workers with at most 20 requests per second. The generated URLs will look something like this: https://user-mgmt.acme.com/user/user-5b0bfce/details
+Run a test called `user-details`. Execute 400 requests from 10 workers with at most 20 requests per second. The generated URLs will look something like this: https://user-mgmt.acme.com/user/user-32dd-14a1-d7f8-d322/details
 ```yaml
 tests:
   - id: user-details
@@ -65,10 +64,8 @@ tests:
           - type: string
             value: user
           - type: randomString
-            minLength: 7
-            maxLength: 7
             chars: abcdef0123456789
-            format: "user-%s"  
+            format: "user-%4,4s-%4,4s-%4,4s-%4,4s"  
           - type: string
             value: details
 ```
