@@ -1,7 +1,7 @@
 
 # Config file format
 ## tests
-A list of Tests (see below). Look at [tests.yaml](tests.yaml) for examples.
+A list of Tests (see below). Take a look at [Test Examples](https://github.com/pbaettig/request0r#test-examples).
 
 ## Test
 ### id
@@ -22,10 +22,10 @@ String: Either http or https
 ### host
 String: The host targeted by the test. If required a custom port can be specified as part of it.
 ### uriComponents
-A list of PathComponents that describe the parts of the URI
+A list of `PathComponent`s that describe the parts of the URI
 
 ## PathComponent
-A URI consists of a number of PathComponents that are joined using "/". There are different PathComponents available:
+A URI consists of a number of PathComponents that are joined using "/". There are different `PathComponent`s available:
 ### type: string
 A static string value.
 #### value
@@ -36,17 +36,19 @@ A random string value.
 String: The characters that can be used to generate the string. (required)
 
 ### format
-String: If specified this format string will be used for generating the string. %s is the only format literal you can use.
-## type: integer
+String: If specified this format string will be used for generating the string. The format for the string literal is as follows 
+
+```%<minLength>,<maxLength>s``` e.g. ```%1,4s``` which will produce a random string consisting of `chars` with a length of between 1-4 characters.
+### type: integer
 A random integer value
-### min
+#### min
 Integer: minimum value (required)
-### max
+#### max
 Integer: maximum value (required)
 
-## type: httpStatus
+### type: httpStatus
 A valid HTTP status code
-### ranges
+#### ranges
 A list of acceptable ranges for the generated code, e.g. 200, 300, 500 (required)
 
 # Test examples
